@@ -1,3 +1,26 @@
+# lerobot-precision
+
+> **Work in progress** — this repo is a fork of [LeRobot](https://github.com/huggingface/lerobot) focused on high-precision, orientation-intensive manipulation with the SO-101 arm.
+
+## Goal
+
+Train policies that can reliably execute tasks requiring **sub-centimeter positional accuracy and precise end-effector orientation** — things like peg insertion, tight pick-and-place, and connector mating — on physical SO-101 hardware.
+
+## Approach
+
+- **Imitation learning** from human teleoperation (leader/follower SO-101 pair) as the primary data source.
+- **Synthetic data** augmentation to cover edge cases and orientations that are tedious to collect manually.
+- Starting baseline: **ACT (Action Chunking with Transformers)** policy, evaluating how far off-the-shelf ACT gets on precision tasks.
+- Actively exploring modifications and alternative architectures to close the remaining precision gap.
+
+## Current Status (as of March 2026)
+
+Still in the evaluation phase — benchmarking ACT policy precision on real hardware and identifying where it breaks down. Parallel exploration of methods to improve accuracy (e.g. diffusion policies, dataset curation strategies, observation space changes).
+
+---
+
+<!-- upstream LeRobot README below -->
+
 <p align="center">
   <img alt="LeRobot, Hugging Face Robotics Library" src="https://raw.githubusercontent.com/huggingface/lerobot/main/media/lerobot-logo-thumbnail.png" width="100%">
   <br/>
