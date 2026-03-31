@@ -11,4 +11,3 @@ else:
     else:
         print("ERROR: Cannot read frame")
     cap.release()
-
