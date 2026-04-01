@@ -128,11 +128,3 @@ lerobot-teleoperate \
 Set `--display_data=true` to see the live camera feed during teleoperation.
 
 ---
-
-
-
-## Notes
-
-- LeRobot uses OpenCV (`opencv` camera type) for USB cameras like the gripper cam.
-- Calibration files for the arms are in `~/.cache/huggingface/lerobot/calibration/`.
-- Camera config is passed inline as JSON or defined in a robot config file.
