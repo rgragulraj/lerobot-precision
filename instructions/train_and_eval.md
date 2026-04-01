@@ -70,11 +70,13 @@ lerobot-train \
 ```
 
 Checkpoints are saved to:
+
 ```
 outputs/act_lenslab_square_pickplace/checkpoints/
 ```
 
 Training will log progress to the terminal. The final model is at:
+
 ```
 outputs/act_lenslab_square_pickplace/checkpoints/last/pretrained_model/
 ```

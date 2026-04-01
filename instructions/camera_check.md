@@ -25,7 +25,7 @@ v4l2-ctl --list-devices
 
 ---
 
-## 1b. Camera visible in Cheese but not in /dev/video*
+## 1b. Camera visible in Cheese but not in /dev/video\*
 
 This happens when the camera is accessed through PipeWire instead of V4L2 directly. Skip `ls /dev/video*` and find the index by scanning with OpenCV:
 
@@ -131,13 +131,13 @@ Set `--display_data=true` to see the live camera feed during teleoperation.
 
 ## 5. Troubleshooting
 
-| Problem | Fix |
-|---|---|
-| `Cannot open camera` | Try a different index (0, 2, 4...) |
-| Black frame / no image | Camera may need a second to warm up; add `time.sleep(1)` before `cap.read()` |
-| Low FPS | Use MJPG format: pass `"fourcc": "MJPG"` in the camera config |
-| Image rotated | Add `"rotation": 90` (or 180, 270) to the camera config |
-| Camera not listed in `/dev/video*` | Camera may be PipeWire-only — scan with OpenCV indices (see Section 1b) |
+| Problem                            | Fix                                                                           |
+| ---------------------------------- | ----------------------------------------------------------------------------- |
+| `Cannot open camera`               | Try a different index (0, 2, 4...)                                            |
+| Black frame / no image             | Camera may need a second to warm up; add `time.sleep(1)` before `cap.read()` |
+| Low FPS                            | Use MJPG format: pass `"fourcc": "MJPG"` in the camera config                |
+| Image rotated                      | Add `"rotation": 90` (or 180, 270) to the camera config                      |
+| Camera not listed in `/dev/video*` | Camera may be PipeWire-only — scan with OpenCV indices (see Section 1b)       |
 
 ---
 

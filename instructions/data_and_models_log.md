@@ -2,17 +2,18 @@
 
 ## Paths
 
-| Type | Location |
-|------|----------|
-| Collected datasets | `~/.cache/huggingface/lerobot/rgragulraj/` |
-| Trained models | `~/models/` |
-| Calibration files | `~/.cache/huggingface/lerobot/calibration/` |
+| Type               | Location                                    |
+| ------------------ | ------------------------------------------- |
+| Collected datasets | `~/.cache/huggingface/lerobot/rgragulraj/`  |
+| Trained models     | `~/models/`                                 |
+| Calibration files  | `~/.cache/huggingface/lerobot/calibration/` |
 
 ---
 
 ## Datasets
 
 ### LENS1_square
+
 - **Path:** `~/.cache/huggingface/lerobot/rgragulraj/LENS1_square/`
 - **Date collected:** Mar 13, 2026
 - **Robot:** SO-101
@@ -25,6 +26,7 @@
 ---
 
 ### lenslab_square_pickplace
+
 - **Path:** `~/.cache/huggingface/lerobot/rgragulraj/lenslab_square_pickplace/`
 - **Date collected:** Mar 20, 2026
 - **Robot:** SO-101
@@ -37,6 +39,7 @@
 ---
 
 ### eval_lenslab_square_pickplace
+
 - **Path:** `~/.cache/huggingface/lerobot/rgragulraj/eval_lenslab_square_pickplace/`
 - **Date:** Mar 20, 2026
 - **Robot:** SO-101
@@ -51,6 +54,7 @@
 ## Trained Models
 
 ### act_lenslab_square_pickplace
+
 - **Path:** `~/models/act_lenslab_square_pickplace/pretrained_model/`
 - **Date trained:** Mar 20, 2026
 - **Policy:** ACT
@@ -62,9 +66,9 @@
 
 ## Summary Table
 
-| Name | Type | Date | Episodes | Task | Result |
-|------|------|------|----------|------|--------|
-| LENS1_square | dataset | Mar 13 | 11 | square pick & place | — |
-| lenslab_square_pickplace | dataset | Mar 20 | 25 | square pick & place | — |
-| eval_lenslab_square_pickplace | eval rollout | Mar 20 | 1 | square pick & place | — |
-| act_lenslab_square_pickplace | ACT model | Mar 20 | trained on 25 eps | square pick & place | poor |
+| Name                          | Type         | Date   | Episodes          | Task                | Result |
+| ----------------------------- | ------------ | ------ | ----------------- | ------------------- | ------ |
+| LENS1_square                  | dataset      | Mar 13 | 11                | square pick & place | —      |
+| lenslab_square_pickplace      | dataset      | Mar 20 | 25                | square pick & place | —      |
+| eval_lenslab_square_pickplace | eval rollout | Mar 20 | 1                 | square pick & place | —      |
+| act_lenslab_square_pickplace  | ACT model    | Mar 20 | trained on 25 eps | square pick & place | poor   |

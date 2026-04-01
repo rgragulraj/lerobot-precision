@@ -17,6 +17,7 @@ uv pip install -e ".[dev]"
 ## Commands
 
 ### Linting & Formatting
+
 ```bash
 pre-commit run --all-files        # Run all pre-commit hooks (ruff, typos, mypy, etc.)
 ruff check src/                   # Lint only
@@ -24,6 +25,7 @@ ruff format src/                  # Format only
 ```
 
 ### Tests
+
 ```bash
 pytest tests/                     # Run all unit tests
 pytest tests/test_datasets.py     # Run a single test file
@@ -31,6 +33,7 @@ pytest tests/ -k "test_name"      # Run a specific test by name
 ```
 
 ### End-to-End Tests (via Make)
+
 ```bash
 make test-end-to-end              # Run full E2E pipeline (all policies)
 make test-act-ete-train           # ACT policy train E2E
@@ -39,6 +42,7 @@ make DEVICE=cuda test-end-to-end  # Run on GPU
 ```
 
 ### Training & Evaluation
+
 ```bash
 lerobot-train --policy.type=act --env.type=aloha --dataset.repo_id=lerobot/aloha_sim_transfer_cube_human
 lerobot-train --config_path=<checkpoint>/train_config.json --resume=true
@@ -46,6 +50,7 @@ lerobot-eval --policy.path=<checkpoint>/pretrained_model --env.type=aloha
 ```
 
 ### Data Collection
+
 ```bash
 lerobot-record --robot.type=so101 --repo_id=<hf_user>/<dataset_name>
 lerobot-teleoperate --robot.type=so101

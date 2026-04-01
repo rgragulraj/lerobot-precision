@@ -9,6 +9,7 @@ How to record teleoperation datasets using the SO-101 arms and gripper camera fo
 Dataset names follow the format: `<hf_username>/<dataset_name>`
 
 **Naming guidelines:**
+
 - Use lowercase with underscores, no spaces
 - Be descriptive: include the lab, object, and task
 - Examples:
@@ -29,11 +30,13 @@ Datasets are saved locally at:
 ```
 
 Example:
+
 ```
 ~/.cache/huggingface/lerobot/rgragulraj/lenslab_square_pickplace/
 ```
 
 Inside, the structure is:
+
 ```
 <dataset_name>/
 ├── meta/                  # Dataset metadata and stats
@@ -89,26 +92,26 @@ lerobot-record \
 
 ## 4. Key parameters explained
 
-| Parameter | What it does |
-|---|---|
-| `--dataset.repo_id` | Dataset name in `username/dataset` format |
-| `--dataset.single_task` | Short text description of the task (used during training) |
-| `--dataset.num_episodes` | Total number of episodes to record |
-| `--dataset.episode_time_s` | Max seconds per episode before auto-stopping |
-| `--dataset.reset_time_s` | Seconds given to reset the scene between episodes |
-| `--dataset.push_to_hub` | Upload to Hugging Face Hub when done (`true`/`false`) |
-| `--display_data` | Show live camera feed and joint data during recording |
-| `--resume` | Continue recording into an existing dataset |
+| Parameter                  | What it does                                              |
+| -------------------------- | --------------------------------------------------------- |
+| `--dataset.repo_id`        | Dataset name in `username/dataset` format                 |
+| `--dataset.single_task`    | Short text description of the task (used during training) |
+| `--dataset.num_episodes`   | Total number of episodes to record                        |
+| `--dataset.episode_time_s` | Max seconds per episode before auto-stopping              |
+| `--dataset.reset_time_s`   | Seconds given to reset the scene between episodes         |
+| `--dataset.push_to_hub`    | Upload to Hugging Face Hub when done (`true`/`false`)     |
+| `--display_data`           | Show live camera feed and joint data during recording     |
+| `--resume`                 | Continue recording into an existing dataset               |
 
 ---
 
 ## 5. Keyboard controls during recording
 
-| Key | Action |
-|---|---|
-| `→` Right arrow | End current episode early and **save** it |
-| `←` Left arrow | End current episode early and **discard** it (re-record) |
-| `Esc` | Stop recording entirely |
+| Key             | Action                                                   |
+| --------------- | -------------------------------------------------------- |
+| `→` Right arrow | End current episode early and **save** it                |
+| `←` Left arrow  | End current episode early and **discard** it (re-record) |
+| `Esc`           | Stop recording entirely                                  |
 
 Use `→` as soon as the task is complete — short, clean episodes train better than episodes padded with dead time.
 

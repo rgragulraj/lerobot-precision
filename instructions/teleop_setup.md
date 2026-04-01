@@ -22,6 +22,7 @@ ls /dev/ttyACM*
 ```
 
 Note which port belongs to the follower and which to the leader. For example:
+
 - Follower → `/dev/ttyACM0`
 - Leader → `/dev/ttyACM1`
 
