@@ -4,6 +4,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
+**lerobot-precision** is a research project by LENS Lab built on top of LeRobot (v0.4.3). The goal is to develop a high-precision, high-orientation-aware manipulation system on low-cost hardware (SO-101), targeting tasks like insertion, screwing, plug/unplug, and connector alignment — with the broader ambition of a generalised robot that can handle objects and perspectives it has never seen before.
+
+Key research directions:
+
+- Modifying the ACT policy source code to improve precision and orientation awareness
+- Multi-policy routing: automatic task detection + language command input to select the appropriate policy at runtime
+- Language-conditioned control (text input to guide policy selection — planned, not yet implemented)
+- Generalisation to novel objects and viewpoints
+- Benchmarking success rate on precision manipulation tasks (benchmarking platform TBD)
+
+This project is in its **initial/exploration phase**. Data collection with the SO-101 is the primary path — Hub datasets are used minimally.
+
 LeRobot (v0.4.3) is a Hugging Face library for real-world robotics in PyTorch. It provides imitation learning and reinforcement learning policies, pretrained models/datasets on Hugging Face Hub, simulation environments (ALOHA, PushT, Libero, MetaWorld), and real hardware robot support (SO-100, SO-101, Koch, Reachy2, Unitree G1, etc.).
 
 ## Installation
@@ -87,9 +99,26 @@ The main package lives in `src/lerobot/`. All CLI entry points are in `src/lerob
 
 Datasets store observations as parquet files (non-image features) and mp4 video files (image features). The `LeRobotDataset` class handles both local and Hub-hosted datasets transparently. Episodes are indexed by `episode_index`; frames by `frame_index`.
 
+## Hardware Setup
+
+- **Robot**: SO-101 (leader + follower arm pair)
+- **Teleop**: SO-101 leader arm (primary), keyboard (secondary)
+- **Cameras**: Top-down webcam (fixed mount) + gripper camera
+- **Policy focus**: ACT (primary), custom policies (future)
+
+## Research Context
+
+- **Lab**: LENS Lab
+- **Repo**: lerobot-precision
+- **Audience**: Solo developer, but code must be structured clearly enough for other lab members to understand
+- **Phase**: Initial — exploring architecture changes to ACT, no custom modifications yet
+- **Benchmarking**: Success rate on precision manipulation tasks; specific benchmark platform TBD
+
 ## Code Style
 
 - Line length: 110 characters (ruff)
 - Target: Python 3.10+
 - Docstrings: Google style convention
 - Quotes: Black-compatible (double quotes)
+- Keep changes modular and well-commented — other lab members need to follow the work
+- Prefer extending existing LeRobot abstractions (factory functions, config dataclasses) over bypassing them
