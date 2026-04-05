@@ -14,10 +14,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import json
 import logging
 import os
 import sys
 import time
+from pathlib import Path
 from queue import Queue
 from typing import Any
 
@@ -27,6 +29,7 @@ from ..teleoperator import Teleoperator
 from ..utils import TeleopEvents
 from .configuration_keyboard import (
     KeyboardEndEffectorTeleopConfig,
+    KeyboardJointTeleopConfig,
     KeyboardRoverTeleopConfig,
     KeyboardTeleopConfig,
 )
@@ -448,3 +451,93 @@ class KeyboardRoverTeleop(KeyboardTeleop):
             "linear.vel": linear_velocity,
             "angular.vel": angular_velocity,
         }
+
+
+class KeyboardJointTeleop(KeyboardTeleop):
+    """Keyboard teleoperator for SO-101 joint-space control.
+
+    Each key press increments a specific joint's target position by `step_size` units
+    per control frame. The target state is tracked internally, initialised from a saved
+    starting position JSON produced by capture_start_position.py.
+
+    Key bindings:
+        w / s  → shoulder_lift  up / down  (primary axis for insertion)
+        a / d  → shoulder_pan   left / right
+        q / e  → elbow_flex     flex / extend
+        r / f  → wrist_flex     up / down
+        t / g  → wrist_roll     clockwise / counter-clockwise
+        z / x  → gripper        open / close
+
+    Use with lerobot-record:
+        --teleop.type=keyboard_joint
+        --teleop.start_position_file=instructions/start_positions/insert_above_slot.json
+    """
+
+    config_class = KeyboardJointTeleopConfig
+    name = "keyboard_joint"
+
+    # Gripper is RANGE_0_100; all other joints are RANGE_M100_100
+    _JOINT_CLAMPS: dict[str, tuple[float, float]] = {
+        "shoulder_pan": (-100.0, 100.0),
+        "shoulder_lift": (-100.0, 100.0),
+        "elbow_flex": (-100.0, 100.0),
+        "wrist_flex": (-100.0, 100.0),
+        "wrist_roll": (-100.0, 100.0),
+        "gripper": (0.0, 100.0),
+    }
+
+    # Maps key character → (motor_name, sign)
+    _KEY_MAP: dict[str, tuple[str, float]] = {
+        "w": ("shoulder_lift", +1.0),
+        "s": ("shoulder_lift", -1.0),
+        "a": ("shoulder_pan", +1.0),
+        "d": ("shoulder_pan", -1.0),
+        "q": ("elbow_flex", +1.0),
+        "e": ("elbow_flex", -1.0),
+        "r": ("wrist_flex", +1.0),
+        "f": ("wrist_flex", -1.0),
+        "t": ("wrist_roll", +1.0),
+        "g": ("wrist_roll", -1.0),
+        "z": ("gripper", +1.0),
+        "x": ("gripper", -1.0),
+    }
+
+    def __init__(self, config: KeyboardJointTeleopConfig):
+        super().__init__(config)
+        self.config = config
+        self._step = config.step_size
+
+        if not config.start_position_file:
+            raise ValueError(
+                "KeyboardJointTeleop requires a start_position_file. "
+                "Run scripts/capture_start_position.py first and pass the path via "
+                "--teleop.start_position_file=<path>."
+            )
+
+        payload = json.loads(Path(config.start_position_file).read_text())
+        # positions: {motor_name: float}  (calibrated, normalised units)
+        self._target: dict[str, float] = dict(payload["positions"])
+        logging.info(f"KeyboardJointTeleop initialised from '{config.start_position_file}': {self._target}")
+
+    @property
+    def action_features(self) -> dict[str, type]:
+        return {f"{motor}.pos": float for motor in self._target}
+
+    @property
+    def feedback_features(self) -> dict:
+        return {}
+
+    def get_action(self) -> dict[str, Any]:
+        if not self.is_connected:
+            raise DeviceNotConnectedError("KeyboardJointTeleop is not connected. Run connect() first.")
+
+        self._drain_pressed_keys()
+
+        for key, is_held in self.current_pressed.items():
+            if is_held and key in self._KEY_MAP:
+                motor, sign = self._KEY_MAP[key]
+                delta = sign * self._step
+                lo, hi = self._JOINT_CLAMPS[motor]
+                self._target[motor] = max(lo, min(hi, self._target[motor] + delta))
+
+        return {f"{motor}.pos": val for motor, val in self._target.items()}

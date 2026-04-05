@@ -42,6 +42,33 @@ class KeyboardEndEffectorTeleopConfig(KeyboardTeleopConfig):
     use_gripper: bool = True
 
 
+@TeleoperatorConfig.register_subclass("keyboard_joint")
+@dataclass
+class KeyboardJointTeleopConfig(KeyboardTeleopConfig):
+    """Configuration for keyboard joint-space teleoperator for SO-101.
+
+    Maps letter keys to per-joint position increments. Designed for precision
+    tasks like insertion where small, deliberate joint nudges are needed.
+
+    Key bindings:
+        w/s  → shoulder_lift  (main vertical, use for lowering into slot)
+        a/d  → shoulder_pan   (base rotation)
+        q/e  → elbow_flex
+        r/f  → wrist_flex
+        t/g  → wrist_roll
+        z/x  → gripper open/close
+
+    Attributes:
+        start_position_file: Path to a JSON file produced by capture_start_position.py.
+            The arm will start (and return to) these joint values each episode.
+        step_size: Position increment applied per control frame (~1/fps seconds) while
+            a key is held. Units match the calibrated motor range (default RANGE_M100_100).
+    """
+
+    start_position_file: str = ""
+    step_size: float = 0.5
+
+
 @TeleoperatorConfig.register_subclass("keyboard_rover")
 @dataclass
 class KeyboardRoverTeleopConfig(TeleoperatorConfig):

@@ -90,6 +90,44 @@ lerobot-record \
 
 ---
 
+**Current task — lenslab block insertion (precision):**
+
+Cameras: gripper cam (index 7) + top webcam (index 5).
+Teleop: keyboard joint-space control (no leader arm needed).
+Before each episode: run `go_to_start_position.py` to return arm to saved pose, then place block in gripper by hand.
+
+```bash
+lerobot-record \
+    --robot.type=so101_follower \
+    --robot.port=/dev/ttyACM0 \
+    --robot.id=vellai_kunjan \
+    --robot.cameras='{"gripper": {"type": "opencv", "index_or_path": 7, "fps": 30, "width": 640, "height": 480}, "top": {"type": "opencv", "index_or_path": 5, "fps": 30, "width": 640, "height": 480}}' \
+    --teleop.type=keyboard_joint \
+    --teleop.start_position_file=instructions/start_positions/insert_above_slot.json \
+    --dataset.repo_id=rgragulraj/lenslab_block_insert \
+    --dataset.single_task="Insert the block into the slot" \
+    --dataset.num_episodes=30 \
+    --dataset.episode_time_s=120 \
+    --dataset.reset_time_s=120 \
+    --dataset.push_to_hub=false \
+    --display_data=true
+```
+
+Keyboard controls during recording:
+
+| Key     | Joint         | Direction                          |
+| ------- | ------------- | ---------------------------------- |
+| `w / s` | shoulder_lift | up / down (primary insertion axis) |
+| `a / d` | shoulder_pan  | left / right                       |
+| `q / e` | elbow_flex    | flex / extend                      |
+| `r / f` | wrist_flex    | up / down                          |
+| `t / g` | wrist_roll    | CW / CCW                           |
+| `z / x` | gripper       | open / close                       |
+| `→`     | —             | save episode                       |
+| `←`     | —             | discard episode                    |
+
+---
+
 ## 4. Key parameters explained
 
 | Parameter                  | What it does                                              |
