@@ -20,6 +20,12 @@ To get more details on each device:
 v4l2-ctl --list-devices
 ```
 
+Can Also use GUVCview for test
+
+```bash
+guvcview -d /dev/video1
+```
+
 > **Note:** On modern Ubuntu, apps like Cheese access cameras via **PipeWire** rather than V4L2 directly.
 > If your gripper camera shows up in Cheese but not under `/dev/video*`, see [Section 1b](#1b-camera-visible-in-cheese-but-not-in-devvideo) below.
 

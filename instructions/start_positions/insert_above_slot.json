@@ -1,0 +1,13 @@
+{
+  "name": "insert_above_slot",
+  "robot_id": "vellai_kunjan",
+  "port": "/dev/ttyACM0",
+  "positions": {
+    "shoulder_pan": -0.03721622627466559,
+    "shoulder_lift": -1.6501650165016457,
+    "elbow_flex": 9.432234432234438,
+    "wrist_flex": 93.37064141196728,
+    "wrist_roll": 3.498694516971284,
+    "gripper": 10.761154855643044
+  }
+}

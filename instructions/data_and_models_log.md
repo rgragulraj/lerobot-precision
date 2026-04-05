@@ -2,11 +2,12 @@
 
 ## Paths
 
-| Type               | Location                                    |
-| ------------------ | ------------------------------------------- |
-| Collected datasets | `~/.cache/huggingface/lerobot/rgragulraj/`  |
-| Trained models     | `~/models/`                                 |
-| Calibration files  | `~/.cache/huggingface/lerobot/calibration/` |
+| Type               | Location                                                                                        |
+| ------------------ | ----------------------------------------------------------------------------------------------- |
+| Collected datasets | `~/.cache/huggingface/lerobot/rgragulraj/`                                                      |
+| Trained models     | `~/models/`                                                                                     |
+| Calibration files  | `~/.cache/huggingface/lerobot/calibration/`                                                     |
+| Visualize datasets | [lerobot/visualize_dataset (HF Space)](https://huggingface.co/spaces/lerobot/visualize_dataset) |
 
 ---
 
