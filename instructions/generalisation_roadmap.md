@@ -119,17 +119,53 @@ Only attempt with >500 episodes — unfrozen BN with small datasets tends to ove
 
 **Target:** Give the policy an explicit spatial token telling it where the object and slot are. This addresses location generalisation more directly than augmentation alone.
 
-### 2a. Choose a Detector
+### 2a. Shape Detection Script (OpenCV)
 
-Ordered by ease of integration:
+Rather than physical markers (AprilTags) or large ML models (GroundingDINO), a simple OpenCV shape detector is the right first approach. The block and slot are known geometric shapes under controlled lab lighting — contour matching is fast, requires no training, and works directly on the actual geometry rather than a fiducial.
 
-1. **AprilTags** (recommended first) — tape a small AprilTag to the object and one to the slot. The `pupil-apriltags` Python library gives sub-mm pose at ~30 fps on CPU with no training. Output: `[x, y, z, qw, qx, qy, qz]` × 2 = 14 floats. Fastest path to validating whether spatial conditioning actually helps.
+**What it produces:** `[cx_obj, cy_obj, w_obj, h_obj, cx_slot, cy_slot, w_slot, h_slot]` — 8 floats, normalised to [0, 1] in image space.
 
-2. **GroundingDINO + SAM2** (recommended second) — text-prompted open-vocabulary detection. No tags needed. Output: `[cx_obj, cy_obj, w_obj, h_obj, cx_slot, cy_slot, w_slot, h_slot]` = 8 floats, normalised to [0, 1] in image space. This generalises to any object you can describe in text.
+**Implementation sketch:**
 
-3. **DINOv2 patch similarity** — cosine similarity between DINOv2 patch features and a reference crop. No fine-tuning needed. Simpler but less precise.
+```python
+import cv2
+import numpy as np
 
-**Recommended path:** Use AprilTags to validate that the architecture works, then switch to GroundingDINO for tag-free operation.
+def detect_block_and_slot(frame_bgr, block_hsv_range, slot_hsv_range):
+    """
+    Returns (block_bbox, slot_bbox) as (cx, cy, w, h) normalised to [0,1],
+    or None for each if not detected.
+    """
+    hsv = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2HSV)
+    h, w = frame_bgr.shape[:2]
+
+    def find_largest_contour_bbox(mask):
+        contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        if not contours:
+            return None
+        c = max(contours, key=cv2.contourArea)
+        if cv2.contourArea(c) < 200:  # noise threshold in pixels
+            return None
+        x, y, bw, bh = cv2.boundingRect(c)
+        return (x + bw/2) / w, (y + bh/2) / h, bw / w, bh / h
+
+    block_mask = cv2.inRange(hsv, *block_hsv_range)
+    slot_mask  = cv2.inRange(hsv, *slot_hsv_range)
+
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
+    block_mask = cv2.morphologyEx(block_mask, cv2.MORPH_OPEN, kernel)
+    slot_mask  = cv2.morphologyEx(slot_mask,  cv2.MORPH_OPEN, kernel)
+
+    return find_largest_contour_bbox(block_mask), find_largest_contour_bbox(slot_mask)
+```
+
+**Calibration per object/slot:** Write a small calibration script that shows a live camera feed with HSV sliders (`cv2.createTrackbar`) to dial in the correct range for each colour under your lab lighting. Save ranges as JSON — one file per object/slot type. Takes 5–10 minutes per new object.
+
+**Handling orientation:** `cv2.minAreaRect()` gives the rotation angle of the detected contour. If slot orientation matters for insertion, extend the output to 10 floats: `[cx_obj, cy_obj, w_obj, h_obj, angle_obj, cx_slot, cy_slot, w_slot, h_slot, angle_slot]` and update `spatial_conditioning_dim` in `ACTConfig` accordingly.
+
+**Fallback for novel objects:** For objects without a calibrated HSV range, fall back to a zero vector or last valid detection (via EMA smoothing). The policy should learn to rely on visual features when the spatial token is uninformative.
+
+**Upgrade path:** Once validated, switching to GroundingDINO (text-prompted, no per-object calibration) is straightforward — it produces the same 8-float output, so only the `SpatialConditioningProcessorStep` needs updating.
 
 ### 2b. Inject Spatial Conditioning via the Existing `env_state_feature` Path
 
@@ -141,7 +177,7 @@ The key insight is that **no changes to the Transformer architecture are needed*
 
 ```python
 use_spatial_conditioning: bool = False
-spatial_conditioning_dim: int = 8  # or 14 for AprilTag 6DOF
+spatial_conditioning_dim: int = 8  # 8 for (cx,cy,w,h) x2; 10 if including rotation angle
 ```
 
 In `validate_features()`: when `use_spatial_conditioning=True`, require that input features include `observation.environment_state` with the matching shape.
