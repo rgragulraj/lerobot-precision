@@ -28,20 +28,26 @@ The hardest design question is: **when and how does Policy 1 hand off to Policy 
 
 Policy 2's training distribution must cover the full output distribution of Policy 1's terminal states. If Policy 1 sometimes leaves the block 6 cm above the slot and sometimes 2 cm, your Policy 2 training data must span that range.
 
-**Option A — Fixed waypoint (recommended to start):**
+**Option A — Fixed waypoint:**
 Policy 1's goal is always to bring the block to a canonical hover pose: a fixed position and orientation directly above the slot centre, at a fixed height (e.g. 4 cm above). Policy 2 always starts from this canonical pose. Clean separation, easy to validate independently.
 
 - Pro: You can train and test the policies completely independently.
 - Pro: Policy 2's training distribution is narrow and well-defined.
 - Con: Policy 1 must learn to hit a precise waypoint, which is itself a precision task. Mitigate by defining the waypoint loosely (±1.5 cm tolerance) and training Policy 2 to handle that range.
 
-**Option B — Wrist-camera trigger:**
+**Option B — Wrist-camera trigger (SELECTED):**
 Policy 2 activates when the wrist camera sees the slot centred and fills more than X% of the frame. Requires a simple classifier or OpenCV detector on the wrist feed.
+
+- Pro: Trigger is tied to visual geometry, not arm position — robust to Policy 1 overshooting or undershooting the canonical hover height.
+- Pro: Naturally handles variation in slot position without re-tuning a fixed waypoint.
+- Con: Requires a reliable slot detector on the wrist feed; noisy detections can cause premature or missed triggers. Smooth with EMA over 3–5 frames.
+
+**Implementation:** Use `cv2.inRange()` + contour detection (same detector as Phase 2 spatial conditioning) on the wrist camera frame. Trigger when: (a) slot contour is detected, (b) slot bounding box centre is within 15% of frame centre, and (c) slot area > threshold_fraction of frame area. Threshold_fraction is calibrated per slot — start at 5% and tune.
 
 **Option C — Z-height threshold:**
 Transition when end-effector Z is within N cm of the slot surface, based on robot state. Simple to implement.
 
-Start with Option A. It lets you develop and validate the two policies independently before worrying about the interface.
+**Decision: Option B is locked in.** The wrist-camera trigger is the handoff mechanism for this project.
 
 ---
 
