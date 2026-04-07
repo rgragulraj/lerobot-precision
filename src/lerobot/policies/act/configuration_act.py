@@ -40,14 +40,27 @@ class ACTConfig(PreTrainedConfig):
         - May optionally work without an "observation.state" key for the proprioceptive robot state.
         - "action" is required as an output key.
 
+    Policy 2 (precision insertion) overrides — pass these at training time via CLI:
+        --policy.chunk_size=20
+        --policy.n_action_steps=1
+        --policy.temporal_ensemble_coeff=0.1
+        --policy.kl_weight=20.0
+        --policy.optimizer_lr=5e-5
+        --policy.optimizer_lr_backbone=5e-6
+
     Args:
         n_obs_steps: Number of environment steps worth of observations to pass to the policy (takes the
             current step and additional steps going back).
         chunk_size: The size of the action prediction "chunks" in units of environment steps.
+            Default (100) suits coarse pick-and-place (Policy 1). Policy 2 uses 20 — predicting fewer steps
+            at a time lets the policy replan more frequently and correct millimetre-level misalignment on
+            the fly.
         n_action_steps: The number of action steps to run in the environment for one invocation of the policy.
             This should be no greater than the chunk size. For example, if the chunk size size 100, you may
             set this to 50. This would mean that the model predicts 100 steps worth of actions, runs 50 in the
             environment, and throws the other 50 out.
+            Policy 2 uses 1 — the policy re-evaluates the wrist camera every single frame (at 30fps), giving
+            maximum reactivity for fine alignment. Requires temporal_ensemble_coeff to be set.
         input_shapes: A dictionary defining the shapes of the input data for the policy. The key represents
             the input data name, and the value is a list indicating the dimensions of the corresponding data.
             For example, "observation.image" refers to an input from a camera with dimensions [3, 96, 96],
@@ -85,15 +98,19 @@ class ACTConfig(PreTrainedConfig):
             ensembling. Defaults to None which means temporal ensembling is not used. `n_action_steps` must be
             1 when using this feature, as inference needs to happen at every step to form an ensemble. For
             more information on how ensembling works, please see `ACTTemporalEnsembler`.
+            Policy 2 uses 0.1 — the most recent prediction gets ~10x weight over the oldest, smoothing
+            out jitter from noisy wrist-camera observations without introducing lag.
         dropout: Dropout to use in the transformer layers (see code for details).
         kl_weight: The weight to use for the KL-divergence component of the loss if the variational objective
             is enabled. Loss is then calculated as: `reconstruction_loss + kl_weight * kld_loss`.
+            Policy 2 uses 20.0 (vs default 10.0) — higher KL weight forces the latent variable to encode
+            more information about the current alignment state, producing more consistent fine trajectories.
     """
 
     # Input / output structure.
     n_obs_steps: int = 1
-    chunk_size: int = 100
-    n_action_steps: int = 100
+    chunk_size: int = 100  # Policy 2: 20
+    n_action_steps: int = 100  # Policy 2: 1
 
     normalization_mapping: dict[str, NormalizationMode] = field(
         default_factory=lambda: {
@@ -126,16 +143,16 @@ class ACTConfig(PreTrainedConfig):
 
     # Inference.
     # Note: the value used in ACT when temporal ensembling is enabled is 0.01.
-    temporal_ensemble_coeff: float | None = None
+    temporal_ensemble_coeff: float | None = None  # Policy 2: 0.1
 
     # Training and loss computation.
     dropout: float = 0.1
-    kl_weight: float = 10.0
+    kl_weight: float = 10.0  # Policy 2: 20.0
 
     # Training preset
-    optimizer_lr: float = 1e-5
+    optimizer_lr: float = 1e-5  # Policy 2: 5e-5
     optimizer_weight_decay: float = 1e-4
-    optimizer_lr_backbone: float = 1e-5
+    optimizer_lr_backbone: float = 1e-5  # Policy 2: 5e-6
 
     def __post_init__(self):
         super().__post_init__()
