@@ -290,6 +290,42 @@ eog ~/.cache/huggingface/lerobot/rgragulraj/policy2_core/goal_images/episode_000
 Every episode must have a corresponding goal image. If any are missing, append to the dataset
 using `--resume=true` and re-collect those specific episodes.
 
+### After verifying — register goal images as a dataset feature
+
+Goal images are saved as `.png` files during recording but are not yet part of the LeRobot dataset
+schema. Run `add_goal_image_feature.py` to convert them into a proper `observation.images.goal`
+video feature so the standard dataset loader picks them up at training time.
+
+```bash
+# Dry run first — checks all goal images exist:
+python scripts/add_goal_image_feature.py \
+    --dataset_root ~/.cache/huggingface/lerobot/rgragulraj/policy2_core \
+    --dry_run
+
+# Full run:
+python scripts/add_goal_image_feature.py \
+    --dataset_root ~/.cache/huggingface/lerobot/rgragulraj/policy2_core
+```
+
+Verify:
+
+```bash
+python -c "
+from pathlib import Path
+from lerobot.datasets.lerobot_dataset import LeRobotDataset
+ds = LeRobotDataset(
+    'rgragulraj/policy2_core',
+    root=Path.home() / '.cache/huggingface/lerobot/rgragulraj/policy2_core',
+)
+assert 'observation.images.goal' in ds.meta.video_keys
+item = ds[0]
+print('goal image shape:', item['observation.images.goal'].shape)
+print('OK')
+"
+```
+
+Run this once per dataset. Re-run Phase 3 and Phase 4 batches the same way before merging.
+
 ---
 
 ## Phase 2 — Spatial conditioning (offline, no re-recording)
@@ -872,3 +908,48 @@ lerobot-train \
 Validation: test on a slot depth not seen in training (e.g. 5 cm if trained on 2/4/6 cm).
 The policy should descend until the block is seated, not stop at the nearest trained depth.
 See Policy2.md §10.3 for the full depth generalisation evaluation protocol.
+
+---
+
+## Inference
+
+Policy 2 requires both a goal image and (Phase 2+) spatial conditioning at inference time.
+Both are provided via processor steps in the pre-processing pipeline.
+
+### Capture the goal image for a novel slot
+
+1. Bring the arm to the canonical hover pose above the slot.
+2. Place the block in the gripper, correctly aligned.
+3. Wait for the arm to stabilise (2–3 seconds — no motion blur).
+4. Capture the wrist-camera frame:
+
+   ```bash
+   python -c "
+   import cv2; cap = cv2.VideoCapture(7)
+   ret, frame = cap.read(); cap.release()
+   cv2.imwrite('goal_novel_slot.png', frame)
+   print('Saved goal_novel_slot.png')
+   "
+   ```
+
+### Wire up the processors in your inference script
+
+```python
+from lerobot.policies.act.processor_act import GoalImageProcessorStep, SpatialConditioningProcessorStep
+
+# Create once at script startup:
+goal_step = GoalImageProcessorStep(
+    goal_image_path="goal_novel_slot.png",
+    target_size=(480, 640),  # must match training resolution
+)
+spatial_step = SpatialConditioningProcessorStep(
+    camera_key="observation.images.wrist",
+    detector_type="shape_wrist",
+    calibration_path="scripts/wrist_calibration.json",
+    ema_alpha=0.5,
+)
+
+# Both steps go before AddBatchDimensionProcessorStep in the pre-processing pipeline.
+# Call reset_goal() at the start of each episode when the target slot changes:
+goal_step.reset_goal("goal_novel_slot_v2.png")
+```

@@ -184,12 +184,12 @@ class ImageTransformsConfig:
             "brightness": ImageTransformConfig(
                 weight=1.0,
                 type="ColorJitter",
-                kwargs={"brightness": (0.8, 1.2)},
+                kwargs={"brightness": (0.5, 1.5)},  # Phase 1a: expanded from (0.8, 1.2)
             ),
             "contrast": ImageTransformConfig(
                 weight=1.0,
                 type="ColorJitter",
-                kwargs={"contrast": (0.8, 1.2)},
+                kwargs={"contrast": (0.5, 2.0)},  # Phase 1a: expanded from (0.8, 1.2)
             ),
             "saturation": ImageTransformConfig(
                 weight=1.0,
@@ -199,7 +199,7 @@ class ImageTransformsConfig:
             "hue": ImageTransformConfig(
                 weight=1.0,
                 type="ColorJitter",
-                kwargs={"hue": (-0.05, 0.05)},
+                kwargs={"hue": (-0.1, 0.1)},  # Phase 1a: expanded from (-0.05, 0.05)
             ),
             "sharpness": ImageTransformConfig(
                 weight=1.0,
@@ -209,7 +209,10 @@ class ImageTransformsConfig:
             "affine": ImageTransformConfig(
                 weight=1.0,
                 type="RandomAffine",
-                kwargs={"degrees": (-5.0, 5.0), "translate": (0.05, 0.05)},
+                kwargs={
+                    "degrees": (-5.0, 5.0),
+                    "translate": (0.1, 0.1),
+                },  # Phase 1a: expanded from (0.05, 0.05)
             ),
         }
     )
@@ -224,6 +227,15 @@ def make_transform_from_config(cfg: ImageTransformConfig):
         return SharpnessJitter(**cfg.kwargs)
     elif cfg.type == "RandomAffine":
         return v2.RandomAffine(**cfg.kwargs)
+    elif cfg.type == "RandomResizedCrop":
+        # Phase 1a: simulates zoom changes and camera position variation.
+        # Pass size=(H, W) matching your observation resolution in kwargs,
+        # e.g. kwargs={"size": [96, 96], "scale": [0.85, 1.0], "ratio": [0.9, 1.1]}
+        return v2.RandomResizedCrop(**cfg.kwargs)
+    elif cfg.type == "RandomErasing":
+        # Phase 1a: partial occlusion robustness (block hidden by arm or other objects).
+        # Default: p=0.3, scale=(0.02, 0.1), ratio=(0.3, 3.3), value=0
+        return v2.RandomErasing(**cfg.kwargs)
     else:
         raise ValueError(f"Transform '{cfg.type}' is not valid.")
 

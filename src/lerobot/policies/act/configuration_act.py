@@ -152,6 +152,13 @@ class ACTConfig(PreTrainedConfig):
     latent_dim: int = 32
     n_vae_encoder_layers: int = 4
 
+    # Selective backbone unfreeze (Policy 1 Phase 1c).
+    # Only use this after >500 Policy 1 episodes. With fewer episodes the unfrozen BN stats tend to
+    # overfit to specific objects and lighting conditions.
+    # Set to ["layer4"] to unfreeze the final ResNet block only.
+    # IMPORTANT: FrozenBatchNorm2d is kept — do not switch to regular BatchNorm when unfreezing.
+    unfreeze_backbone_layers: list[str] = field(default_factory=list)
+
     # Spatial conditioning (Policy 2 Phase 2).
     # When True, the policy expects observation.environment_state to be a 10-float keypoint vector:
     #   [cx_block, cy_block, w_block, h_block, angle_block,
@@ -173,6 +180,22 @@ class ACTConfig(PreTrainedConfig):
     use_goal_image: bool = False
     goal_image_feature_key: str = "observation.images.goal"
     use_shared_goal_backbone: bool = True
+
+    # Language conditioning (Policy 1 Phase 4).
+    # When enabled, a CLIP ViT-B/32 text embedding (512-float) is projected into the encoder token sequence
+    # as an additional 1D token. This lets a single policy handle multiple task variants selected by natural
+    # language ("hover above the square slot" vs "hover above the round slot").
+    #
+    # The model itself does NOT contain the CLIP encoder — embeddings are pre-cached offline via
+    # scripts/add_language_features.py and stored as observation.language (shape [language_dim]) in the
+    # dataset. At inference, LanguageConditioningProcessorStep computes the embedding from a command string.
+    #
+    # Bridge to spatial conditioning: the parsed shape name (e.g. "square") from the language command is
+    # passed to SpatialConditioningProcessorStep.update_shape() so the spatial detector filters to the
+    # correct slot geometry — no architecture changes needed for the spatial path.
+    use_language_conditioning: bool = False
+    language_dim: int = 512  # CLIP ViT-B/32 pooled text embedding dimension
+    language_model_name: str = "openai/clip-vit-base-patch32"
 
     # Inference.
     # Note: the value used in ACT when temporal ensembling is enabled is 0.01.
@@ -223,6 +246,12 @@ class ACTConfig(PreTrainedConfig):
         if not self.image_features and not self.env_state_feature and not self.robot_state_feature:
             raise ValueError(
                 "You must provide at least one image, environment state, or robot state among the inputs."
+            )
+        if self.use_spatial_conditioning and not self.env_state_feature:
+            raise ValueError(
+                "use_spatial_conditioning=True requires 'observation.environment_state' "
+                f"with shape ({self.spatial_conditioning_dim},) in input_features. "
+                "Run add_spatial_features.py on the dataset before training."
             )
 
     @property

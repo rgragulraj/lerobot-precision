@@ -326,6 +326,31 @@ class ACT(nn.Module):
             # Note: The forward method of this returns a dict: {"feature_map": output}.
             self.backbone = IntermediateLayerGetter(backbone_model, return_layers={"layer4": "feature_map"})
 
+            # Selective backbone unfreeze (Policy 1 Phase 1c).
+            # By default all backbone params are frozen (FrozenBatchNorm2d keeps BN stats fixed).
+            # When unfreeze_backbone_layers is set (e.g. ["layer4"]), only those ResNet blocks are
+            # made trainable — everything else stays frozen. Use optimizer_lr_backbone ~100x lower
+            # than the head LR to avoid catastrophic forgetting.
+            if config.unfreeze_backbone_layers:
+                for param in self.backbone.parameters():
+                    param.requires_grad = False
+                for layer_name in config.unfreeze_backbone_layers:
+                    layer = getattr(backbone_model, layer_name, None)
+                    if layer is not None:
+                        for param in layer.parameters():
+                            param.requires_grad = True
+
+        # Language conditioning (Policy 1 Phase 4).
+        # A CLIP text embedding (pre-cached offline) is projected to dim_model and prepended as a single
+        # encoder token. The model does NOT store the CLIP encoder — embeddings arrive as observation.language
+        # in the batch (pre-cached at training time; injected at inference by LanguageConditioningProcessorStep).
+        # The token is silently skipped when observation.language is absent, which allows mixing labelled and
+        # unlabelled episodes in the same dataset.
+        if self.config.use_language_conditioning:
+            self.encoder_language_input_proj = nn.Linear(config.language_dim, config.dim_model)
+            # Single learnable positional embedding for the language token (mirrors the 1D token pattern).
+            self.encoder_language_pos_embed = nn.Embedding(1, config.dim_model)
+
         # Goal image conditioning (Policy 2 Phase 1).
         # The goal image is encoded into additional encoder tokens so the transformer can cross-attend to
         # both the current wrist-camera view and the target state simultaneously.
@@ -494,6 +519,15 @@ class ACT(nn.Module):
         # Environment state token.
         if self.config.env_state_feature:
             encoder_in_tokens.append(self.encoder_env_state_input_proj(batch[OBS_ENV_STATE]))
+
+        # Language token (Policy 1 Phase 4).
+        # observation.language is a pre-computed CLIP embedding of shape (B, language_dim).
+        # Silently skipped when absent so Phase 1–3 episodes train correctly in a mixed dataset.
+        if self.config.use_language_conditioning and "observation.language" in batch:
+            lang_embed = batch["observation.language"]  # (B, language_dim)
+            lang_token = self.encoder_language_input_proj(lang_embed)  # (B, dim_model)
+            encoder_in_tokens.append(lang_token)
+            encoder_in_pos_embed.append(self.encoder_language_pos_embed.weight[0].unsqueeze(0))
 
         if self.config.image_features:
             # For a list of images, the H and W may vary but H*W is constant.
