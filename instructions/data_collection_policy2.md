@@ -49,13 +49,13 @@ If you haven't saved this pose yet:
 
 ```bash
 # Teleoperate the arm to the desired hover position manually, then capture it:
-python scripts/capture_start_position.py --output instructions/start_positions/insert_above_slot.json
+python scripts/capture_start_position.py --name insert_above_slot
 ```
 
 To load it at the start of each session:
 
 ```bash
-python scripts/go_to_start_position.py --file instructions/start_positions/insert_above_slot.json
+python scripts/go_to_start_position.py --name insert_above_slot
 ```
 
 ### 3. Verify wrist camera view at hover pose
@@ -104,7 +104,7 @@ lerobot-record \
 **Step 1 — Reset to canonical hover pose**
 
 ```bash
-python scripts/go_to_start_position.py --file instructions/start_positions/insert_above_slot.json
+python scripts/go_to_start_position.py --name insert_above_slot
 ```
 
 Place the block in the gripper by hand. Align it carefully to match the slot's insertion axis —
@@ -199,7 +199,7 @@ lerobot-record \
 **Step 1 — Reset to start position**
 
 ```bash
-python scripts/go_to_start_position.py --file instructions/start_positions/insert_above_slot.json
+python scripts/go_to_start_position.py --name insert_above_slot
 ```
 
 Place block in gripper. Apply deliberate variation — shift laterally by up to ±0.5 cm or rotate
@@ -582,7 +582,7 @@ depths within a single dataset — each `policy2_depth_XX` must contain only epi
 Return arm to canonical hover pose:
 
 ```bash
-python scripts/go_to_start_position.py --file instructions/start_positions/insert_above_slot.json
+python scripts/go_to_start_position.py --name insert_above_slot
 ```
 
 **Step 2 — Place block and apply start variation**
