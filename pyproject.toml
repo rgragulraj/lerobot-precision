@@ -192,6 +192,21 @@ lerobot-imgtransform-viz="lerobot.scripts.lerobot_imgtransform_viz:main"
 lerobot-edit-dataset="lerobot.scripts.lerobot_edit_dataset:main"
 
 # ---------------- Tool Configurations ----------------
+
+# Exclude policy tests not relevant to this project (ACT only).
+# To temporarily run them: pytest tests/policies/groot --no-header
+[tool.pytest.ini_options]
+addopts = [
+  "--ignore=tests/policies/groot",
+  "--ignore=tests/policies/pi0_pi05",
+  "--ignore=tests/policies/smolvla",
+  "--ignore=tests/policies/hilserl",
+  "--ignore=tests/policies/rtc",
+  "--ignore=tests/policies/xvla",
+  "--ignore=tests/policies/test_sac_config.py",
+  "--ignore=tests/policies/test_sac_policy.py",
+]
+
 [tool.setuptools.packages.find]
 where = ["src"]
 
