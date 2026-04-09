@@ -1,6 +1,6 @@
 # lerobot-precision
 
-> **Work in progress** — this repo is a fork of [LeRobot](https://github.com/huggingface/lerobot) focused on high-precision, orientation-intensive manipulation with the SO-101 arm.
+> **Personal lab project** — this is a research fork maintained by [@rgragulraj](https://github.com/rgragulraj) under [LENS Lab](https://ransml.github.io/lens-lab/). It is **not affiliated with or a contribution to** the official [LeRobot](https://github.com/huggingface/lerobot) project or HuggingFace. The CI workflows in this repo are disabled for automated runs and are not connected to the upstream LeRobot CI.
 
 ## Goal
 
