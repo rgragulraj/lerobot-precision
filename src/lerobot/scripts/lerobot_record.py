@@ -170,6 +170,17 @@ class DatasetRecordConfig:
     # Rename map for the observation to override the image and state keys
     rename_map: dict[str, str] = field(default_factory=dict)
 
+    # Policy 2 Phase 1: goal image capture.
+    # When True, after each episode the recorder pauses and waits for the user to press G.
+    # A single frame from `goal_image_camera_key` is saved as
+    # `{dataset.root}/goal_images/episode_XXXXXX.png` for use as the per-episode goal image
+    # during Policy 2 Phase 1 training.
+    record_goal_image: bool = False
+    # Camera key (as defined in --robot.cameras) to capture the goal image from.
+    # For Policy 2 this must be the wrist/gripper camera — the top-down view is uninformative
+    # at insertion scale.
+    goal_image_camera_key: str = "wrist"
+
     def __post_init__(self):
         if self.single_task is None:
             raise ValueError("You need to provide a task as argument in `single_task`.")
@@ -235,6 +246,71 @@ class RecordConfig:
                                V
                   ( Rerun Log / Loop Wait )
 """
+
+
+def _capture_goal_image_to_file(
+    robot: "Robot",
+    dataset: "LeRobotDataset",
+    camera_key: str,
+    events: dict,
+    play_sounds: bool = True,
+) -> None:
+    """Wait for 'G' key press then save a single camera frame as the goal image for this episode.
+
+    Called after the episode recording loop exits (before reset / save_episode). The user should:
+      1. Ensure the block is fully seated in the slot.
+      2. Open the gripper.
+      3. Retract the elbow so the arm is clear of the wrist-camera view.
+      4. Wait for the arm to stop moving (no blur).
+      5. Press G.
+
+    The captured frame is saved to:
+        {dataset.root}/goal_images/episode_XXXXXX.png
+
+    where XXXXXX is the current episode index (before save_episode() is called).
+    """
+    from PIL import Image
+
+    goal_dir = Path(dataset.root) / "goal_images"
+    goal_dir.mkdir(parents=True, exist_ok=True)
+    # dataset.num_episodes is the count of already-saved episodes, so this is the index of the
+    # episode currently in the buffer (not yet saved).
+    episode_idx = dataset.num_episodes
+    goal_path = goal_dir / f"episode_{episode_idx:06d}.png"
+
+    print(
+        "\n[Goal Image] Episode recorded.\n"
+        "  1. Ensure block is fully seated in the slot.\n"
+        "  2. Open gripper.\n"
+        "  3. Retract elbow — arm must be clear of the wrist camera view.\n"
+        "  4. Wait for arm to fully stop (no motion blur).\n"
+        "  5. Press G to capture.\n"
+    )
+    log_say("Ready for goal image capture. Open gripper, clear arm from frame, then press G.", play_sounds)
+
+    events["capture_goal_image"] = False  # reset in case it was set earlier
+
+    while not events["capture_goal_image"] and not events["stop_recording"]:
+        precise_sleep(0.05)
+
+    if not events["capture_goal_image"]:
+        # stop_recording was set — abort without saving
+        return
+
+    obs = robot.get_observation()
+    if camera_key not in obs:
+        logging.warning(
+            f"[Goal Image] Camera key '{camera_key}' not found in robot observation "
+            f"(available: {list(obs.keys())}). Goal image NOT saved for episode {episode_idx}."
+        )
+        events["capture_goal_image"] = False
+        return
+
+    frame = obs[camera_key]  # numpy array (H, W, C), uint8
+    Image.fromarray(frame).save(goal_path)
+    print(f"[Goal Image] Saved → {goal_path}")
+    log_say("Goal image captured.", play_sounds)
+    events["capture_goal_image"] = False
 
 
 @safe_stop_image_writer
@@ -477,6 +553,21 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
                     single_task=cfg.dataset.single_task,
                     display_data=cfg.display_data,
                 )
+
+                # Policy 2 Phase 1: capture a single wrist-camera frame as the goal image.
+                # Skipped on rerecord (the episode will be thrown away anyway).
+                if (
+                    cfg.dataset.record_goal_image
+                    and not events["rerecord_episode"]
+                    and not events["stop_recording"]
+                ):
+                    _capture_goal_image_to_file(
+                        robot=robot,
+                        dataset=dataset,
+                        camera_key=cfg.dataset.goal_image_camera_key,
+                        events=events,
+                        play_sounds=cfg.play_sounds,
+                    )
 
                 # Execute a few seconds without recording to give time to manually reset the environment
                 # Skip reset for the last episode to be recorded

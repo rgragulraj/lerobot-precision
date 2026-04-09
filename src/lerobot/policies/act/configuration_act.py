@@ -94,6 +94,17 @@ class ACTConfig(PreTrainedConfig):
             documentation in the policy class).
         latent_dim: The VAE's latent dimension.
         n_vae_encoder_layers: The number of transformer layers to use for the VAE's encoder.
+        use_spatial_conditioning: Whether to condition on a 10-float spatial keypoint vector
+            (observation.environment_state). Flows through the existing env_state_feature path —
+            no architecture changes. Features extracted offline via scripts/detect_block_slot.py.
+        spatial_conditioning_dim: Expected dimension of the spatial token. Used for validation only.
+        use_goal_image: Whether to condition the policy on a goal image (observation.images.goal). Required
+            for Policy 2 — enables generalisation to novel shapes by giving the policy a visual target state.
+        goal_image_feature_key: Dataset key for the per-episode goal image. Default matches the recording
+            convention used during Policy 2 data collection.
+        use_shared_goal_backbone: Whether the goal image shares the ResNet backbone with the current
+            observation images. Recommended until >300 episodes — keeps both frames in the same embedding
+            space so the policy can compute the visual delta (current → goal) directly.
         temporal_ensemble_coeff: Coefficient for the exponential weighting scheme to apply for temporal
             ensembling. Defaults to None which means temporal ensembling is not used. `n_action_steps` must be
             1 when using this feature, as inference needs to happen at every step to form an ensemble. For
@@ -140,6 +151,28 @@ class ACTConfig(PreTrainedConfig):
     use_vae: bool = True
     latent_dim: int = 32
     n_vae_encoder_layers: int = 4
+
+    # Spatial conditioning (Policy 2 Phase 2).
+    # When True, the policy expects observation.environment_state to be a 10-float keypoint vector:
+    #   [cx_block, cy_block, w_block, h_block, angle_block,
+    #    cx_slot,  cy_slot,  w_slot,  h_slot,  angle_slot]
+    # All values in [0,1]; angles in [-0.5, 0.5] (representing [-90°, 90°]).
+    # This is fed through the existing env_state_feature path in ACT — no architecture change needed.
+    # The spatial features are extracted offline from recorded wrist-camera videos using
+    # scripts/detect_block_slot.py + scripts/add_spatial_features.py.
+    use_spatial_conditioning: bool = False
+    spatial_conditioning_dim: int = 10  # must match the detector output dimension
+
+    # Goal image conditioning (Policy 2 Phase 1).
+    # When enabled, a single goal image (what "success" looks like from the wrist camera) is fed as an
+    # additional encoder token alongside the current observation. The policy learns to close the gap between
+    # the current wrist view and the goal view, which is the key mechanism for generalising to novel shapes.
+    # Set use_goal_image=True at training time when the dataset contains observation.images.goal.
+    # Use shared backbone (default) until you have >300 episodes — it keeps the current and goal frames in
+    # the same embedding space so the policy can directly compute the visual delta (current → goal).
+    use_goal_image: bool = False
+    goal_image_feature_key: str = "observation.images.goal"
+    use_shared_goal_backbone: bool = True
 
     # Inference.
     # Note: the value used in ACT when temporal ensembling is enabled is 0.01.

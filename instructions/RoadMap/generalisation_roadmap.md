@@ -42,7 +42,7 @@ Policy 2 activates when the wrist camera sees the slot centred and fills more th
 - Pro: Naturally handles variation in slot position without re-tuning a fixed waypoint.
 - Con: Requires a reliable slot detector on the wrist feed; noisy detections can cause premature or missed triggers. Smooth with EMA over 3–5 frames.
 
-**Implementation:** Use `cv2.inRange()` + contour detection (same detector as Phase 2 spatial conditioning) on the wrist camera frame. Trigger when: (a) slot contour is detected, (b) slot bounding box centre is within 15% of frame centre, and (c) slot area > threshold_fraction of frame area. Threshold_fraction is calibrated per slot — start at 5% and tune.
+**Implementation:** Use the shape-template detector (`scripts/detect_block_slot.py`) on the wrist camera frame — the same detector used for Phase 2 spatial conditioning. Trigger when: (a) slot contour is detected (matchShapes score below threshold), (b) `cx_slot` and `cy_slot` are within 15% of 0.5 (slot centre in frame), and (c) `w_slot * h_slot` exceeds a minimum fraction of the frame area. Smooth the trigger condition with an EMA over 3–5 frames to avoid single-frame false positives.
 
 **Option C — Z-height threshold:**
 Transition when end-effector Z is within N cm of the slot surface, based on robot state. Simple to implement.
@@ -181,7 +181,7 @@ The 8-float keypoint vector from Phase 2 must include the in-plane rotation angl
 [cx_block, cy_block, w_block, h_block, angle_block, cx_slot, cy_slot, w_slot, h_slot, angle_slot]
 ```
 
-Set `spatial_conditioning_dim: int = 10` for Policy 2. The policy learns to correct for the delta between `angle_block` and `angle_slot` — this generalises to novel orientations because it encodes the _relationship_, not a specific angle. Use `cv2.minAreaRect()` in the detector (already handles this).
+Set `spatial_conditioning_dim: int = 10` for Policy 2. The policy learns to correct for the delta between `angle_block` and `angle_slot` — this generalises to novel orientations because it encodes the _relationship_, not a specific angle. The detector (`scripts/detect_block_slot.py`) uses `cv2.minAreaRect()` internally and already outputs this angle.
 
 ### Slot height and depth
 
@@ -263,51 +263,46 @@ Only attempt with >500 episodes — unfrozen BN with small datasets tends to ove
 
 **Target:** Give Policy 1 an explicit spatial token telling it where the block and slot are. This addresses location generalisation more directly than augmentation alone.
 
-#### 2a. Shape Detection Script (OpenCV)
+#### 2a. Shape Detection Script (OpenCV — lighting-independent)
 
-Rather than physical markers (AprilTags) or large ML models (GroundingDINO), a simple OpenCV shape detector is the right first approach. The block and slot are known geometric shapes under controlled lab lighting — contour matching is fast, requires no training, and works directly on the actual geometry.
+Rather than physical markers (AprilTags) or large ML models (GroundingDINO), OpenCV shape matching is the right approach. It works on any geometric shape, requires no training, runs fast, and — critically — is **lighting-independent**.
 
-**What it produces:** `[cx_obj, cy_obj, w_obj, h_obj, cx_slot, cy_slot, w_slot, h_slot]` — 8 floats, normalised to [0, 1] in image space.
+**Why not HSV colour detection:** HSV thresholds break when lighting changes between sessions (overhead vs. window, morning vs. afternoon). Re-calibrating HSV ranges every session is not sustainable. More importantly, HSV is colour-specific — it cannot generalise to novel block shapes with different colours.
 
-```python
-import cv2
-import numpy as np
+**Detection approach — geometry only, not colour:**
 
-def detect_block_and_slot(frame_bgr, block_hsv_range, slot_hsv_range):
-    """
-    Returns (block_bbox, slot_bbox) as (cx, cy, w, h) normalised to [0,1],
-    or None for each if not detected.
-    """
-    hsv = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2HSV)
-    h, w = frame_bgr.shape[:2]
-
-    def find_largest_contour_bbox(mask):
-        contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        if not contours:
-            return None
-        c = max(contours, key=cv2.contourArea)
-        if cv2.contourArea(c) < 200:  # noise threshold in pixels
-            return None
-        x, y, bw, bh = cv2.boundingRect(c)
-        return (x + bw/2) / w, (y + bh/2) / h, bw / w, bh / h
-
-    block_mask = cv2.inRange(hsv, *block_hsv_range)
-    slot_mask  = cv2.inRange(hsv, *slot_hsv_range)
-
-    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
-    block_mask = cv2.morphologyEx(block_mask, cv2.MORPH_OPEN, kernel)
-    slot_mask  = cv2.morphologyEx(slot_mask,  cv2.MORPH_OPEN, kernel)
-
-    return find_largest_contour_bbox(block_mask), find_largest_contour_bbox(slot_mask)
+```
+Frame → CLAHE (local contrast normalisation)
+      → Gaussian blur
+      → Canny edges (Otsu auto-threshold — adapts to any lighting)
+      → Morphological close (seal edge gaps)
+      → findContours
+      → matchShapes vs. saved shape templates (Hu moment invariants)
+      → minAreaRect → (cx, cy, w, h, angle)
 ```
 
-**Calibration per object/slot:** Write a small calibration script that shows a live camera feed with HSV sliders (`cv2.createTrackbar`) to dial in the correct range for each colour under your lab lighting. Save ranges as JSON. Takes 5–10 minutes per new object.
+- **CLAHE** normalises local contrast so lighting shifts don't affect edge magnitudes.
+- **Otsu auto-threshold** automatically selects the Canny threshold from the image histogram — no manual tuning.
+- **`cv2.matchShapes`** compares contour geometry using Hu moments, invariant to scale, rotation, and lighting. A template captured once works across any lighting condition.
 
-**Handling orientation:** `cv2.minAreaRect()` gives the rotation angle of the detected contour. For insertion tasks where block orientation matters, extend the output to 10 floats: `[cx_obj, cy_obj, w_obj, h_obj, angle_obj, cx_slot, cy_slot, w_slot, h_slot, angle_slot]` and update `spatial_conditioning_dim` accordingly.
+**What it produces:** `[cx_block, cy_block, w_block, h_block, angle_block, cx_slot, cy_slot, w_slot, h_slot, angle_slot]` — 10 floats normalised to [0, 1]. Angles normalised to [-0.5, 0.5].
 
-**Fallback for novel objects:** Fall back to a zero vector or last valid detection (via EMA smoothing). Policy 1 should learn to rely on visual features when the spatial token is uninformative.
+**Calibration (one time per shape):**
 
-**Upgrade path:** Once validated, switching to GroundingDINO (text-prompted, no per-object calibration) is straightforward — it produces the same 8-float output, so only the `SpatialConditioningProcessorStep` needs updating.
+```bash
+python scripts/detect_block_slot.py --calibrate --target=block --camera_index=<top_down_idx>
+python scripts/detect_block_slot.py --calibrate --target=slot  --camera_index=<top_down_idx>
+```
+
+Point the camera at the target object and press **C** to capture its contour as a shape template. No HSV sliders. Templates are stored in `scripts/wrist_calibration.json` as contour point lists.
+
+**Why this generalises to novel objects:** When a new block or slot shape is introduced, run calibration once to capture its contour. `cv2.matchShapes` will match against the new template immediately — no re-tuning of any threshold.
+
+**Fallback for novel objects:** Fall back to a zero vector when no contour matches within the score threshold. Policy 1 should learn to rely on visual features when the spatial token is uninformative (zero vector is a valid training signal for the fallback case).
+
+**Handling rotation:** `cv2.minAreaRect()` already returns the in-plane rotation angle of the bounding rectangle. This is included in the 10-float output as `angle_block` and `angle_slot`. Set `spatial_conditioning_dim=10` for Policy 1 if orientation matters for the task (e.g. asymmetric slots).
+
+**Upgrade path:** Switching to GroundingDINO (text-prompted, zero-shot) later requires only updating the detection backend — the 10-float output format and the `SpatialConditioningProcessorStep` stay identical.
 
 #### 2b. Inject Spatial Conditioning via the Existing `env_state_feature` Path
 

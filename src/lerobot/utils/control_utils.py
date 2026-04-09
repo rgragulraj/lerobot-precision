@@ -135,6 +135,8 @@ def init_keyboard_listener():
     events["exit_early"] = False
     events["rerecord_episode"] = False
     events["stop_recording"] = False
+    # Policy 2 Phase 1: set to True when the user presses G during the goal-image capture phase.
+    events["capture_goal_image"] = False
 
     if is_headless():
         logging.warning(
@@ -159,6 +161,9 @@ def init_keyboard_listener():
                 print("Escape key pressed. Stopping data recording...")
                 events["stop_recording"] = True
                 events["exit_early"] = True
+            elif hasattr(key, "char") and key.char == "g":
+                print("G pressed. Capturing goal image...")
+                events["capture_goal_image"] = True
         except Exception as e:
             print(f"Error handling key press: {e}")
 

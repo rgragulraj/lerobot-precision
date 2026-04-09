@@ -70,20 +70,16 @@ class ACTPolicy(PreTrainedPolicy):
     def get_optim_params(self) -> dict:
         # TODO(aliberts, rcadene): As of now, lr_backbone == lr
         # Should we remove this and just `return self.parameters()`?
+        # Note: when use_shared_goal_backbone=True, model.goal_backbone IS model.backbone (same object),
+        # so its params appear under model.backbone.* and are already caught below. The separate-backbone
+        # case (use_shared_goal_backbone=False) names params model.goal_backbone.* and needs its own match.
+        def _is_backbone(name: str) -> bool:
+            return name.startswith("model.backbone") or name.startswith("model.goal_backbone")
+
         return [
+            {"params": [p for n, p in self.named_parameters() if not _is_backbone(n) and p.requires_grad]},
             {
-                "params": [
-                    p
-                    for n, p in self.named_parameters()
-                    if not n.startswith("model.backbone") and p.requires_grad
-                ]
-            },
-            {
-                "params": [
-                    p
-                    for n, p in self.named_parameters()
-                    if n.startswith("model.backbone") and p.requires_grad
-                ],
+                "params": [p for n, p in self.named_parameters() if _is_backbone(n) and p.requires_grad],
                 "lr": self.config.optimizer_lr_backbone,
             },
         ]
@@ -330,6 +326,33 @@ class ACT(nn.Module):
             # Note: The forward method of this returns a dict: {"feature_map": output}.
             self.backbone = IntermediateLayerGetter(backbone_model, return_layers={"layer4": "feature_map"})
 
+        # Goal image conditioning (Policy 2 Phase 1).
+        # The goal image is encoded into additional encoder tokens so the transformer can cross-attend to
+        # both the current wrist-camera view and the target state simultaneously.
+        if self.config.use_goal_image:
+            if not self.config.image_features:
+                raise ValueError(
+                    "use_goal_image requires at least one image feature (image_features must be non-empty)."
+                )
+            if self.config.use_shared_goal_backbone:
+                # Share weights with the main backbone — both frames live in the same embedding space,
+                # letting the policy directly compute the visual delta (current → goal).
+                self.goal_backbone = self.backbone
+            else:
+                # Separate backbone — only recommended after >300 episodes when the extra capacity pays off.
+                goal_backbone_model = getattr(torchvision.models, config.vision_backbone)(
+                    replace_stride_with_dilation=[False, False, config.replace_final_stride_with_dilation],
+                    weights=config.pretrained_backbone_weights,
+                    norm_layer=FrozenBatchNorm2d,
+                )
+                self.goal_backbone = IntermediateLayerGetter(
+                    goal_backbone_model, return_layers={"layer4": "feature_map"}
+                )
+            self.encoder_goal_feat_input_proj = nn.Conv2d(
+                backbone_model.fc.in_features, config.dim_model, kernel_size=1
+            )
+            self.encoder_goal_cam_feat_pos_embed = ACTSinusoidalPositionEmbedding2d(config.dim_model // 2)
+
         # Transformer (acts as VAE decoder when training with the variational objective).
         self.encoder = ACTEncoder(config)
         self.decoder = ACTDecoder(config)
@@ -489,6 +512,20 @@ class ACT(nn.Module):
                 # Convert to list to extend properly
                 encoder_in_tokens.extend(list(cam_features))
                 encoder_in_pos_embed.extend(list(cam_pos_embed))
+
+        # Goal image tokens (Policy 2 Phase 1).
+        # The goal image (per-episode, single frame) is encoded and appended as additional encoder tokens.
+        # The decoder cross-attends to all encoder tokens, so no decoder changes are needed — the goal
+        # representation is naturally integrated into the transformer's attention over the full context.
+        if self.config.use_goal_image and self.config.goal_image_feature_key in batch:
+            goal_img = batch[self.config.goal_image_feature_key]  # (B, C, H, W)
+            goal_feat = self.goal_backbone(goal_img)["feature_map"]  # (B, C', H', W')
+            goal_pos = self.encoder_goal_cam_feat_pos_embed(goal_feat).to(dtype=goal_feat.dtype)
+            goal_feat = self.encoder_goal_feat_input_proj(goal_feat)  # (B, dim_model, H', W')
+            goal_feat = einops.rearrange(goal_feat, "b c h w -> (h w) b c")
+            goal_pos = einops.rearrange(goal_pos, "b c h w -> (h w) b c")
+            encoder_in_tokens.extend(list(goal_feat))
+            encoder_in_pos_embed.extend(list(goal_pos))
 
         # Stack all tokens along the sequence dimension.
         encoder_in_tokens = torch.stack(encoder_in_tokens, axis=0)

@@ -380,43 +380,56 @@ The policy learns: when `(cx_slot, cy_slot) ≈ (0.5, 0.5)` and `angle_block ≈
 
 ### 6.2 Detector for wrist camera
 
-The wrist camera view is different from the top-down view. At hover height, the wrist camera looks directly at the slot opening from above. Detection strategy:
+The wrist camera view is different from the top-down view. At hover height, the wrist camera looks directly at the slot opening from above.
 
-**Slot detection:** The slot opening will appear as a distinct shape (dark interior, light slot walls) in the wrist frame. Use edge/contour detection on the slot structure:
+**Detection approach: lighting-independent shape template matching**
 
-```python
-def detect_slot_from_wrist(frame_bgr, slot_hsv_range):
-    """
-    Detect slot opening from the wrist camera looking downward.
-    The slot appears as a geometric opening (dark interior) in the wrist view.
-    """
-    hsv = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2HSV)
-    h, w = frame_bgr.shape[:2]
+The detector works purely on geometry, not colour. This is important because:
 
-    slot_mask = cv2.inRange(hsv, *slot_hsv_range)
-    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
-    slot_mask = cv2.morphologyEx(slot_mask, cv2.MORPH_OPEN, kernel)
+- Lighting changes (lab overhead vs. window light vs. different sessions) shift HSV values unpredictably.
+- The block and slot are geometric shapes — their _edges_ are stable under any lighting.
+- Phase 3 (shape diversity) requires the detector to work on novel shapes without re-calibration.
 
-    contours, _ = cv2.findContours(slot_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    if not contours:
-        return None
-    c = max(contours, key=cv2.contourArea)
-    if cv2.contourArea(c) < 100:
-        return None
+**Pipeline per frame:**
 
-    rect = cv2.minAreaRect(c)
-    (cx, cy), (bw, bh), angle = rect
-    return cx / w, cy / h, bw / w, bh / h, angle / 180.0
+```
+BGR → Grayscale → CLAHE (local contrast normalisation)
+    → Gaussian blur → Canny edges (Otsu auto-threshold)
+    → Morphological close (seal edge gaps)
+    → findContours → matchShapes vs. saved templates
+    → minAreaRect → (cx, cy, w, h, angle)
 ```
 
-**Block face detection:** From the wrist camera, the block's bottom face may be visible as it approaches the slot. Alternatively, use the block's edges relative to the slot frame. Calibrate HSV ranges for the wrist view separately from the top-down view — lighting conditions are very different at this close range.
+1. **CLAHE** normalises local contrast — the frame looks uniformly lit regardless of ambient conditions.
+2. **Otsu auto-threshold** automatically selects the Canny threshold from the image histogram — no manual tuning, adapts to any lighting.
+3. **Canny edges** respond to intensity _gradients_, not absolute brightness — robust to global lighting shifts.
+4. **`cv2.matchShapes`** compares contour geometry using Hu moment invariants, which are invariant to scale, rotation, and lighting. A template captured once works across sessions.
 
-Run calibration for the wrist view:
+**Calibration (one time per shape):**
+
+Point the wrist camera at the target object (block face or slot opening). Run:
 
 ```bash
-python scripts/detect_block_slot.py --calibrate --camera_index=7
-# Save as 'wrist_slot' and 'wrist_block_face'
+# Slot template:
+python scripts/detect_block_slot.py --calibrate --target=slot --camera_index=7
+
+# Block face template:
+python scripts/detect_block_slot.py --calibrate --target=block --camera_index=7
 ```
+
+Press **C** to capture the largest detected contour as the shape template. Press **S** to save.
+No HSV sliders. The template is the contour itself — it generalises to any shape you point it at.
+
+**Why this generalises to Phase 3 (novel shapes):**
+When you introduce a new shape in Phase 3, run calibration once to capture that shape's contour template. The detector immediately works on the new shape — no re-tuning.
+
+**Verify before running on dataset:**
+
+```bash
+python scripts/detect_block_slot.py --verify --camera_index=7
+```
+
+Green box = block face | Red box = slot. Check that angles are stable frame-to-frame.
 
 ### 6.3 ACT config changes
 
