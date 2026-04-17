@@ -164,8 +164,9 @@ lerobot-train \
   --dataset.repo_id=rgragulraj/policy1_diverse_all \
   --dataset.root=~/.cache/huggingface/lerobot/rgragulraj/policy1_diverse_all \
   --dataset.image_transforms.enable=true \
+  --dataset.video_backend=pyav \
   --policy.push_to_hub=false \
-  --training.num_train_steps=100000 \
+  --steps=100000 \
   --output_dir=outputs/policy1_phase1b
 ```
 
