@@ -203,6 +203,64 @@ lerobot-train \
 
 ---
 
+## Step 4b — On the remote PC: verify the model before transferring
+
+The remote PC has no physical robot, so `lerobot-eval` cannot be run here. Instead, run a two-step sanity check to confirm the checkpoint is valid before copying it to USB.
+
+**Check 1 — Inspect config.json** (confirms training finished and features were saved correctly):
+
+```bash
+python3 -c "
+import json
+from pathlib import Path
+p = Path('outputs/policy1_phase1b/checkpoints/last/pretrained_model')
+cfg = json.loads((p / 'config.json').read_text())
+print('Policy type:', cfg.get('policy_type'))
+print('Input features:')
+for k, v in cfg.get('input_features', {}).items():
+    print(f'  {k}: shape={v[\"shape\"]}')
+print('Output features:')
+for k, v in cfg.get('output_features', {}).items():
+    print(f'  {k}: shape={v[\"shape\"]}')
+"
+```
+
+Expected output: `policy_type: act`, input features showing `observation.state` + `observation.images.top` + `observation.images.gripper`, output feature showing `action`.
+
+**Check 2 — Load model and run a forward pass** (confirms weights are uncorrupted and the network produces finite outputs):
+
+```bash
+python3 -c "
+import json, torch
+from pathlib import Path
+from lerobot.policies.act.modeling_act import ACTPolicy
+
+model_path = Path('outputs/policy1_phase1b/checkpoints/last/pretrained_model')
+policy = ACTPolicy.from_pretrained(str(model_path))
+policy.eval()
+device = 'cuda' if torch.cuda.is_available() else 'cpu'
+policy.to(device)
+print(f'Loaded on {device}, params: {sum(p.numel() for p in policy.parameters()):,}')
+
+cfg = json.loads((model_path / 'config.json').read_text())
+batch = {}
+for key, feat in cfg.get('input_features', {}).items():
+    batch[key] = torch.zeros((1,) + tuple(feat['shape']), device=device)
+
+with torch.no_grad():
+    action = policy.select_action(batch)
+
+assert not torch.isnan(action).any(), 'NaN in output!'
+assert not torch.isinf(action).any(), 'Inf in output!'
+print(f'Output shape: {tuple(action.shape)}, range: [{action.min():.3f}, {action.max():.3f}]')
+print('Sanity check PASSED')
+"
+```
+
+If both checks pass, the checkpoint is valid. Proceed to copy it to USB.
+
+---
+
 ## Step 5 — On the remote PC: copy model to USB
 
 Plug in the USB.
@@ -286,6 +344,8 @@ Place the block at the start position, run the command. Press `Ctrl+C` to stop.
 - [ ] `conda activate lerobot` confirmed
 - [ ] Training command runs without errors
 - [ ] `outputs/policy1_phase1b/checkpoints/last/pretrained_model/` exists after training
+- [ ] `config.json` lists `policy_type: act`, input features (state + 2 images), output feature (action)
+- [ ] Forward pass sanity check PASSED (no NaN/Inf, output shape correct)
 - [ ] Model copied to USB
 - [ ] USB safely ejected
 
